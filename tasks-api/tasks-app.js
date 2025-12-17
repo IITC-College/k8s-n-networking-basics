@@ -5,7 +5,14 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 
-const filePath = path.join(__dirname, process.env.TASKS_FOLDER, 'tasks.txt');
+const tasksFolder = process.env.TASKS_FOLDER || 'tasks';
+const tasksDir = path.join(__dirname, tasksFolder);
+const filePath = path.join(tasksDir, 'tasks.txt');
+
+// Ensure the tasks directory exists
+if (!fs.existsSync(tasksDir)) {
+  fs.mkdirSync(tasksDir, { recursive: true });
+}
 
 const app = express();
 
@@ -24,12 +31,20 @@ const extractAndVerifyToken = async (headers) => {
 app.get('/tasks', async (req, res) => {
   try {
     const uid = await extractAndVerifyToken(req.headers); // we don't really need the uid
+    // Ensure file exists before reading
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, '', { flag: 'w' });
+    }
     fs.readFile(filePath, (err, data) => {
       if (err) {
         console.log(err);
         return res.status(500).json({ message: 'Loading the tasks failed.' });
       }
       const strData = data.toString();
+      if (!strData.trim()) {
+        // File is empty, return empty tasks array
+        return res.status(200).json({ message: 'Tasks loaded.', tasks: [] });
+      }
       const entries = strData.split('TASK_SPLIT');
       entries.pop(); // remove last, empty entry
       console.log(entries);
@@ -49,6 +64,10 @@ app.post('/tasks', async (req, res) => {
     const title = req.body.title;
     const task = { title, text };
     const jsonTask = JSON.stringify(task);
+    // Ensure file exists before appending
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, '', { flag: 'w' });
+    }
     fs.appendFile(filePath, jsonTask + 'TASK_SPLIT', (err) => {
       if (err) {
         console.log(err);
